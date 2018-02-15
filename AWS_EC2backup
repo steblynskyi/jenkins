@@ -1,0 +1,141 @@
+#!/bin/bash
+#
+# The script make backup of volumes of EC2 instances with tags "backup -> true".
+
+
+# Keep snapshots for last "n_days".
+n_days=7
+
+# Path to log file.
+log_file="$HOME/.ec2backup.log"
+
+
+log_record () {
+  for i in $list_of_volumes; do
+    volume_info=( `echo $i | sed 's/,/\n/g'` )
+    if [[ $5 == ${volume_info[0]} ]]; then
+      for l in $list_of_instances; do
+        instance_info=( `echo $l | sed 's/,/\n/g'` )
+        if [[ ${volume_info[1]} == ${instance_info[0]} ]]; then
+          echo "`date --utc +%FT%T`;$1;$2;$3;$4;EC2 Name ${instance_info[1]};$5;Create date of snapshot is $6" | tr "_" " " >> $log_file
+        fi
+      done
+    fi
+  done
+}
+
+help_parameter () {
+  echo -e "\nScript usage:  $0 <account name> <action>\n"
+  echo    "    <account name>  - [account67|gocurb|curb|account56|ridecharge]"
+  echo    "                        AWS account name in credentials file \"$HOME/.aws/credentials\"."
+  echo    "    <action>        - [backup|report]"
+  echo    "                        backup - create snapshots of EC2 instances of account <account name> and delete snapshots oldest than $n_days days."
+  echo    "                        report - send status report on email."
+  echo -e "    -h|--help|help  - display this help and exit.\n\n"
+  exit
+}
+
+create_delete_snapshots () {
+  # Get list of volumes for backup.
+  volumes_list=`aws ec2 describe-instances --profile $aws_account --filters "Name=tag:backup,Values=true" --query 'Reservations[*].Instances[*].BlockDeviceMappings[*].Ebs.VolumeId' | grep vol | cut -d \" -f2`
+
+  # Get lists for delete task.
+  list_of_instances=`aws ec2 describe-instances --profile $aws_account --query 'Reservations[*].Instances[*].[InstanceId,Tags[?Key==\`Name\`].Value]' | tr -d " \n\t" | tr -s "[]" | sed 's/\]\,\[/\n/g' | tr -d '[]"'`
+  list_of_volumes=`aws ec2 describe-volumes --profile $aws_account --query 'Volumes[*].[VolumeId,Attachments[*].InstanceId]' | tr -d " \n\t" | tr -s "[]" | sed 's/\]\,\[/\n/g' | tr -d '[]"'`
+  list_of_snapshots=`aws ec2 describe-snapshots --profile $aws_account --filters Name=description,Values=scheduled-backup --query 'Snapshots[*].[VolumeId,SnapshotId,StartTime]' | tr -d " \n\t" | tr -s "[]" | sed 's/\]\,\[/\n/g' | tr -d '[]"'`
+
+
+  # Create snapshots of volumes in list.
+  for i in $volumes_list; do
+    if [[ `aws ec2 create-snapshot --profile $aws_account --volume-id $i --description "scheduled-backup"` ]]; then
+      status1="SUCCESS"
+      status2="CREATED"
+      message="Snapshot_of_${i}_volume_has_been_created_successfully"
+    else
+      status1="ERROR"
+      status2="CREATE-FAILED"
+      message="Snapshot_of_${i}_volume_failed"
+    fi
+    log_record $aws_account $status1 $status2 $message $i `date --utc +%FT%T`
+  done
+
+  # Delete snapshots oldest then "n_days".
+  let "backup_period = `date +%s` - 86400 * $n_days"
+  for i in $list_of_snapshots; do
+    snapshot_info=( `echo $i | sed 's/,/\n/g'` )
+    snap_timestamp=`date -d ${snapshot_info[2]} +%s`
+    if [[ $backup_period -gt $snap_timestamp ]]; then
+      if  [[ `echo "${snapshot_info[1]}" | grep "^snap"` ]]; then
+        if aws ec2 delete-snapshot --profile $aws_account --snapshot-id ${snapshot_info[1]}; then
+          status1="SUCCESS"
+          status2="DELETED"
+          message="Snapshot_${snapshot_info[1]}_deleted_because_it_oldest_then_${n_days}_days"
+        else
+          status1="ERROR"
+          status2="DELETE-FAILED"
+          message="Delete_of_snapshot_${snapshot_info[1]}_failed_because_AWS_Delete_command_finished_with_error"
+        fi
+        log_record $aws_account $status1 $status2 $message ${snapshot_info[0]} ${snapshot_info[2]}
+      else
+        status1="ERROR"
+        status2="DELETE-CRITICAL-ERROR"
+        message="${snapshot_info[1]}_is_not_SNAPSHOT!!!_Review_the_script"
+        log_record $aws_account $status1 $status2 $message ${snapshot_info[0]} ${snapshot_info[2]}
+      fi
+    fi
+  done
+}
+
+send_status_report () {
+  current_date=`date --utc +%F`
+  check_status=`grep $current_date $log_file | grep $aws_account | cut -d ";" -f3 | grep -i error`
+  if [[ $check_status == "" ]]; then
+    backup_status="Success"
+  else
+    backup_status="Failure"
+  fi
+
+  aws sns publish \
+    --topic-arn arn:aws:sns:us-east-1:676203907616:vts-cloudwatch-alerts \
+    --subject "AWS EC2 Instances Daily Backup Status of $aws_account: $backup_status" \
+    --message "EC2 Instances Daily Backup Status of $aws_account: $backup_status."$'\n\n'\
+"The snapshots of following volumes have been created:"$'\n'\
+"`grep $current_date $log_file | grep $aws_account | grep CREATE | cut -d ";" -f 3,6,7 | tr ";" ":" | sort -t ":" -k 2`"$'\n\n'\
+"The snapshots of following volumes have been deleted:"$'\n'\
+"`grep $current_date $log_file | grep $aws_account | grep DELETE | cut -d ";" -f 3,6,7 | tr ";" ":" | sort -t ":" -k 2`"
+}
+
+# Chose AWS account.
+if [ -n "$1" ]; then
+  case $1 in
+    account56|ridecharge)
+      aws_account=account56
+      ;;
+    account67|gocurb|curb)
+      aws_account=account67
+      ;;
+    help|--help|-h|*)
+      help_parameter
+      ;;
+  esac
+else
+  help_parameter
+fi
+
+# Chose action.
+if [ -n "$2" ]; then
+  case $2 in
+    backup)
+      create_delete_snapshots
+      ;;
+    report)
+      send_status_report
+      ;;
+    *)
+      help_parameter
+      ;;
+  esac
+else
+  help_parameter
+fi
+
