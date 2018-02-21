@@ -84,4 +84,5 @@ sleep 5
 echo "Verifying cluster health"
 with_retries ssh ${node_ips[0]} \
   ETCDCTL_ENDPOINTS=https://localhost:2379 etcdctl cluster-health
-  
+  cluster config data f1 var echo et 
+  Verifying 
