@@ -140,4 +140,11 @@ else
 fi
 
 
-  
+  if (-n "2"); then
+   case $2 in 
+      backup)
+       create_delete_snapshots
+       ;;
+       report)
+       send_status_report
+       
