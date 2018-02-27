@@ -138,13 +138,11 @@ if [ -n "$2" ]; then
 else
   help_parameter
 fi
+01 print("Hostname:");
+02 print("\t"+hostname());
+03 print("Date:");
+04 print("\t"+Date());
+05 db = connect("localhost/admin");
+06 print("Admin Collections:");
+07 printjson(db.getCollectionNames());
 
-
-  if (-n "2"); then
-   case $2 in 
-      backup)
-       create_delete_snapshots
-       ;;
-       report)
-       send_status_report
-       
