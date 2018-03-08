@@ -108,7 +108,7 @@ send_status_report () {
 # Chose AWS account.
 if [ -n "$1" ]; then
   case $1 in
-    account56|ridecharge)
+    |ridecharge)
       aws_account=
       ;;
       aws_account=
