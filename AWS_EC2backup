@@ -109,10 +109,9 @@ send_status_report () {
 if [ -n "$1" ]; then
   case $1 in
     account56|ridecharge)
-      aws_account=account56
+      aws_account=
       ;;
-    account67|gocurb|curb)
-      aws_account=account67
+      aws_account=
       ;;
     help|--help|-h|*)
       help_parameter
