@@ -145,13 +145,12 @@ if [ -n "$1" ]; then
       _volume_has_been_created_successfully
       ;;
     report)
-       _failed_because_AWS_Delete_command_finished_with_error
+      _failed_because_AWS_Delete_command_finished_with_error
       ;;
-     *)
+    *)
        help_parameter
        ;;
     esac
   else
    help_parameter        
 fi
-   
