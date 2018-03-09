@@ -154,3 +154,20 @@ if [ -n "$1" ]; then
   else
    help_parameter        
 fi
+
+# Acction of code adding the backup days.
+if [ -n "$1" ]; then
+  case $1 in
+    backup
+      _volume_has_been_created_successfully
+      ;;
+    report)
+      _failed_because_AWS_Delete_command_finished_with_error
+      ;;
+    *)
+       help_parameter
+       ;;
+    esac
+  else
+   help_parameter        
+fi
