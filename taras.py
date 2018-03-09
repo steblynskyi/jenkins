@@ -45,3 +45,10 @@ Node-Selectors:  <none>
 Tolerations:     node.alpha.kubernetes.io/notReady:NoExecute for 300s
                  node.alpha.kubernetes.io/unreachable:NoExecute for 300s
 Events:          <none>
+  onditions:
+  Type           Status
+  Initialized    True 
+  Ready          True 
+  PodScheduled   True 
+Volumes:
+  default-token-n26bk:
